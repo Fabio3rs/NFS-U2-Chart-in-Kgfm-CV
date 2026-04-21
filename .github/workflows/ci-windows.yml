@@ -1,0 +1,81 @@
+name: CI - Windows (MSVC)
+
+on:
+  push:
+    branches: ["master"]
+  pull_request:
+    branches: ["master"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build on Windows with MSVC
+    runs-on: windows-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - configuration: Release
+            arch: Win32
+          - configuration: Debug
+            arch: Win32
+          - configuration: Release
+            arch: x64
+          - configuration: Debug
+            arch: x64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v1.0.2
+
+      - name: Configure CMake (Visual Studio)
+        shell: pwsh
+        run: |
+          cmake -S . -B build -G "Visual Studio 17 2022" -A ${{ matrix.arch }} -DCMAKE_BUILD_TYPE=${{ matrix.configuration }}
+
+      - name: Build
+        shell: pwsh
+        run: |
+          cmake --build build --config ${{ matrix.configuration }} -- /m
+
+      - name: Collect artifacts
+        shell: pwsh
+        run: |
+          $cfg = "${{ matrix.configuration }}"
+          $arch = "${{ matrix.arch }}"
+          $dest = "artifacts\nfsu2-chart-$cfg-$arch"
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+
+          # Try common output locations for VS/CMake builds
+          $candidates = @(
+            "build\\bin",
+            "build\\${cfg}",
+            "bin",
+            "build\\Debug",
+            "build\\Release"
+          )
+
+          foreach ($p in $candidates) {
+            if (Test-Path $p) {
+              Copy-Item -Path "$p\\*" -Destination $dest -Recurse -Force -ErrorAction SilentlyContinue
+            }
+          }
+
+          # Also copy the produced .asi/.dll if present in the project root
+          Get-ChildItem -Path $dest -Recurse | Select-Object FullName
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nfsu2-chart-${{ matrix.configuration }}-${{ matrix.arch }}
+          path: artifacts\nfsu2-chart-${{ matrix.configuration }}-${{ matrix.arch }}\
+          if-no-files-found: error
