@@ -23,10 +23,6 @@ jobs:
             arch: Win32
           - configuration: Debug
             arch: Win32
-          - configuration: Release
-            arch: x64
-          - configuration: Debug
-            arch: x64
 
     steps:
       - name: Checkout
